@@ -1,0 +1,17 @@
+{
+    "name": "cge/mapping-tool",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "Cge\\MappingTool\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "ST"
+        }
+    ],
+    "require": {
+        "htmlburger/carbon-fields": "^3.6"
+    }
+}
