@@ -1,32 +1,45 @@
 const mappingTool = () => ({
     sheetMaster: null,
+    sheetPlace: null,
     sheetEntriesList: null,
+    sheetOverview: null,
     sheetsContainerEl: null,
+    map: null,
     sheets: [],
+    loading: false,
     init() {
+        this.mappingToolEl = this.$el;
         this.sheetsContainerEl = this.$el.querySelector('.map-sidebar-sheets');
         // TO MAKE THE MAP APPEAR YOU MUST
         // ADD YOUR ACCESS TOKEN FROM
         // https://account.mapbox.com
         mapboxgl.accessToken = mappingToolObject.accessToken;
-        const map = new mapboxgl.Map({
+        this.map = new mapboxgl.Map({
             container: this.$el.querySelector('#mapping-tool-map'), // container ID
             style: 'mapbox://styles/mapbox/dark-v10', // style URL
             center: [10, 50], // starting position [lng, lat]
             zoom: 3.6, // starting zoom
+            //fitBoundsOptions: { padding: this.calcMapBoundsPadding() }
         });
-        map.on('style.load', () => {
-            map.setFog({}); // Set the default atmosphere style
 
-            map.addSource('points', {
+        this.map.jumpTo({
+            padding: this.calcMapBoundsPadding()
+        });
+
+        this.map.on('load', async () => {
+            this.map.setFog({}); // Set the default atmosphere style
+
+            const points =  await fetch('/wp-json/mapping-tool/v1/getPoints').then(r => r.json());
+
+            this.map.addSource('points', {
                 type: 'geojson',
-                data: '/wp-json/mapping-tool/v1/getPoints',
+                data: points,
                 cluster: true,
                 clusterMaxZoom: 14, // Max zoom to cluster points on
                 clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
             });
 
-            map.addLayer({
+            this.map.addLayer({
                 id: 'clusters',
                 type: 'circle',
                 source: 'points',
@@ -35,11 +48,11 @@ const mappingTool = () => ({
                     'circle-color': [
                         'step',
                         ['get', 'point_count'],
-                        '#51bbd6',
+                        '#0FADEA',
                         2,
-                        '#f1f075',
+                        '#0FADEA',
                         4,
-                        '#f28cb1'
+                        '#0FADEA'
                     ],
                     'circle-radius': [
                         'step',
@@ -53,7 +66,7 @@ const mappingTool = () => ({
                 }
             });
 
-            map.addLayer({
+            this.map.addLayer({
                 id: 'cluster-count',
                 type: 'symbol',
                 source: 'points',
@@ -65,43 +78,64 @@ const mappingTool = () => ({
                 }
             });
 
-            map.addLayer({
+            this.map.addLayer({
                 id: 'unclustered-point',
                 type: 'circle',
                 source: 'points',
                 filter: ['!', ['has', 'point_count']],
                 paint: {
-                    'circle-color': '#11b4da',
-                    'circle-radius': 4,
+                    'circle-color': '#0FADEA',
+                    'circle-radius': 7,
                     'circle-stroke-width': 1,
                     'circle-stroke-color': '#fff'
                 }
             });
 
-            map.on('click', 'clusters', (e) => {
-                const features = map.queryRenderedFeatures(e.point, {
+            this.map.on('click', 'clusters', (e) => {
+                const features = this.map.queryRenderedFeatures(e.point, {
                     layers: ['clusters']
                 });
                 const clusterId = features[0].properties.cluster_id;
-                map.getSource('points').getClusterExpansionZoom(
+                this.map.getSource('points').getClusterExpansionZoom(
                     clusterId,
                     (err, zoom) => {
                         if (err) return;
 
-                        map.easeTo({
+                        this.map.easeTo({
                             center: features[0].geometry.coordinates,
-                            zoom: zoom
+                            zoom: zoom,
+                            padding: this.calcMapBoundsPadding()
                         });
                     }
                 );
             });
 
-            map.on('mouseenter', 'clusters', () => {
-                map.getCanvas().style.cursor = 'pointer';
+            this.map.on('mouseenter', 'clusters', () => {
+                this.map.getCanvas().style.cursor = 'pointer';
             });
-            map.on('mouseleave', 'clusters', () => {
-                map.getCanvas().style.cursor = '';
+            this.map.on('mouseleave', 'clusters', () => {
+                this.map.getCanvas().style.cursor = '';
             });
+
+            this.map.on('mouseenter', 'unclustered-point', () => {
+                this.map.getCanvas().style.cursor = 'pointer';
+            });
+            this.map.on('mouseleave', 'unclustered-point', () => {
+                this.map.getCanvas().style.cursor = '';
+            });
+
+            this.map.on('click', 'unclustered-point', (e) => {
+                this.openPlace(e.features[0].properties.id)
+            });
+
+            // this.map.easeTo({
+            //     padding: this.calcMapBoundsPadding(),
+            //     duration: 0
+            // });
+
+
+            this.fitBounds(points)
+
         });
     },
 
@@ -109,40 +143,370 @@ const mappingTool = () => ({
         this.sheetMaster.show();
     },
 
-    updateSheets() {
-        if (this.getVisibleSheets().length > 0) {
+    async openList() {
+        await this.loadEntriesList();
+        const visibleSheets = this.getPrimaryVisibleSheets();
+        this.sheetEntriesList.$el.style.minHeight = visibleSheets[visibleSheets.length - 1]?.$el.clientHeight + 'px';
+        this.sheetEntriesList.show();
+    },
+
+    async openOverview(id) {
+        await this.loadPreview(id);
+        const visibleSheets = this.getPrimaryVisibleSheets();
+        this.sheetOverview.$el.style.minHeight = visibleSheets[visibleSheets.length - 1]?.$el.clientHeight + 'px';
+        this.sheetOverview.show(async () => {
+            await this.updatePoints();
+        });
+    },
+
+    async openPlace(id) {
+        this.sheetOverview.close();
+        if (this.sheetPlace.visible) {
+            this.sheetPlace.close();
+            await new Promise((resolve) => {
+                setTimeout(async () => {
+                    resolve();
+                }, 300);
+            })
+        }
+        await this.loadPlace(id);
+
+        const visibleSheets = this.getPrimaryVisibleSheets();
+        this.sheetPlace.$el.style.minHeight = visibleSheets[visibleSheets.length - 1]?.$el.clientHeight + 'px';
+        this.sheetPlace.show();
+    },
+
+    closeCurrent() {
+        const visibleSheets = this.getPrimaryVisibleSheets();
+        visibleSheets[visibleSheets.length - 1]?.close();
+        visibleSheets[visibleSheets.length - 2]?.increase();
+    },
+
+    updateSheets(sheet = null, isClosingAction = false) {
+
+        // if (isClosingAction) {
+        //     console.log(sheet.$id == this.sheetMaster.$id)
+        //     console.log()
+        //
+        // }
+
+        const visibleSheets = this.getPrimaryVisibleSheets();
+
+        if (visibleSheets.length > 0) {
             this.sheetsContainerEl.classList.add('has-sheets');
         } else {
             this.sheetsContainerEl.classList.remove('has-sheets');
         }
+
+        this.sheets.forEach((sheet) => {
+            if (visibleSheets.length > 1 && sheet !== this.sheets[this.sheets.length - 1] && sheet.visible === true) {
+                sheet.reduce();
+            }
+        });
+
+        visibleSheets[visibleSheets.length - 1]?.increase();
     },
 
-    getVisibleSheets() {
-        return this.sheets.filter((sheet) => sheet.visible === true);
+    getPrimaryVisibleSheets() {
+        return this.sheets.filter((sheet) => sheet.visible === true && sheet.position === 1);
     },
 
-    changeFilters() {
-        console.log(1)
+    async changeFilters (e) {
+        const filterEl = e.currentTarget;
+
+        const formData = new FormData(filterEl);
+
+        this.filterData = {};
+
+        if (formData.get('source')) {
+            const fitTermSelectors = filterEl.querySelectorAll(`.mapping-tool-filter-term[data-source="${formData.get('source')}"]`);
+            this.filterData['source'] = formData.get('source');
+            fitTermSelectors.forEach((el) => {
+                el.classList.add('visible');
+
+                const input = el.querySelector('input');
+
+                this.filterData[input.getAttribute('name')] = formData.getAll(input.getAttribute('name'));
+
+            });
+        }
+
+        const notFitTermSelectors = filterEl.querySelectorAll(`.mapping-tool-filter-term:not([data-source="${formData.get('source')}"])`);
+
+        notFitTermSelectors.forEach((el) => {
+            el.classList.remove('visible');
+        });
+
+        await this.updatePoints();
+    },
+
+    async updatePoints() {
+        this.loading = true;
+
+        const response = await fetch(
+            '/wp-json/mapping-tool/v1/getPoints?' + new URLSearchParams(this.filterData)
+        );
+
+        const data = await response.json();
+
+        this.map.getSource('points').setData(data);
+
+        this.loading = false;
+
+        this.fitBounds(data);
+
+
+        //this.map.removeLayer('points-labels');
+    },
+
+    async loadEntriesList() {
+        this.sheetEntriesList.$refs.entriesList.innerHTML = '';
+
+        const paramsObject = Alpine.raw(this.filterData) ?? {};
+
+        const params = new URLSearchParams(paramsObject);
+
+        this.loading = true;
+
+        const response = await fetch(
+            '/wp-json/mapping-tool/v1/getEntries?' + params
+        ).then(r => r.json());
+
+        this.loading = false;
+
+        response.entries.forEach((entry) => {
+            const itemEl = document.createElement('div');
+            itemEl.classList.add('map-list-item');
+            itemEl.setAttribute('x-on:click', `openOverview(${entry.id})`);
+
+            if (entry.post_type_accent_color) {
+                itemEl.style.setProperty('--color-accent', entry.post_type_accent_color);
+            }
+
+            itemEl.innerHTML = `
+                <div class="map-list-item__type" style="">${entry.post_type_name}</div>
+                <div class="map-list-item__title">${entry.post_title}</div>
+            `;
+
+            this.sheetEntriesList.$refs.entriesList.appendChild(itemEl);
+        });
+    },
+
+    async loadPlace(placeId) {
+        this.sheetPlace.$refs.entriesList.innerHTML = '';
+
+        const paramsObject = Alpine.raw(this.filterData) ?? {};
+
+        const params = new URLSearchParams(Object.assign(paramsObject, {place_id: placeId}));
+
+        this.loading = true;
+
+        const response = await fetch(
+            '/wp-json/mapping-tool/v1/getEntries?' + params
+        ).then(r => r.json());
+
+
+        this.loading = false;
+
+        //this.sheetPlace.$refs.overviewSubHeadline.innerHTML = '';
+        this.sheetPlace.$refs.overviewHeadline.innerHTML = response.place.post_title;
+
+        response.entries.forEach((entry) => {
+            const itemEl = document.createElement('div');
+            itemEl.classList.add('map-list-item');
+            itemEl.setAttribute('x-on:click', `openOverview(${entry.id})`);
+
+
+            if (entry.post_type_accent_color) {
+                itemEl.style.setProperty('--color-accent', entry.post_type_accent_color);
+            }
+
+            itemEl.innerHTML = `
+                <div class="map-list-item__type">${entry.post_type_name}</div>
+                <div class="map-list-item__title">${entry.post_title}</div>
+            `;
+
+            this.sheetPlace.$refs.entriesList.appendChild(itemEl);
+        });
+    },
+
+    async loadPreview(id) {
+        this.sheetOverview.$refs.overviewBody.innerHTML = '';
+
+        this.loading = true;
+
+        const response = await fetch(
+            '/wp-json/mapping-tool/v1/getPost?post_id=' + id
+        ).then(r => r.json());
+
+        this.loading = false;
+
+        if (response.post.post_type_accent_color) {
+            this.sheetOverview.$el.style.setProperty('--color-accent', response.post.post_type_accent_color);
+        } else {
+            this.sheetOverview.$el.style.removeProperty('--color-accent');
+        }
+
+        this.sheetOverview.$refs.overviewSubHeadline.innerHTML = response.post.post_type_name;
+        this.sheetOverview.$refs.overviewHeadline.innerHTML = response.post.post_title;
+
+        if (response.post.thumbnail_url) {
+            this.sheetOverview.$refs.overviewBody.innerHTML += `
+                <div class="map-sidebar-sheet-section sheet-overview-body__section">
+                    <img class="sheet-overview-body__cover" src="${response.post.thumbnail_url}" />
+                </div>
+            `;
+        }
+
+        this.sheetOverview.$refs.overviewBody.innerHTML += `
+            <div class="map-sidebar-sheet-section sheet-overview-body__section">
+                ${response.post.content}
+            </div>
+        `;
+
+        for (const taxonomy of response.taxonomies ?? []) {
+            const values = [];
+
+            if (taxonomy.values.length > 0) {
+                for (const value of  taxonomy.values ?? []) {
+                    values.push(value.name);
+                }
+
+                this.sheetOverview.$refs.overviewBody.innerHTML += `
+                    <div class="map-sidebar-sheet-section">
+                        <div class="map-sidebar-sheet-section__header">
+                            <div class="sidebar-sheet-section__headline">
+                                ${taxonomy.taxonomy.label}
+                            </div>
+                        </div>
+                        <div>
+                            ${values.join(', ')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // this.map.addLayer({
+            //     'id': 'points-labels',
+            //     'type': 'symbol',
+            //     'source': 'points',
+            //     'layout': {
+            //         // get the title name from the source's "title" property
+            //         'text-field': ['get', 'title'],
+            //         'text-font': [
+            //             'Open Sans Semibold',
+            //             'Arial Unicode MS Bold'
+            //         ],
+            //         'text-offset': [0, -1.5],
+            //         'text-anchor': 'bottom'
+            //     },
+            //     paint: {
+            //         "text-color": "#ffffff",
+            //     },
+            // });
+        }
+
+        if (response.places) {
+
+            const placesList = [];
+
+            for (const {properties} of response.places.features) {
+                placesList.push(properties.title);
+            }
+
+            this.sheetOverview.$refs.overviewBody.innerHTML += `
+                <div class="map-sidebar-sheet-section">
+                    <div class="map-sidebar-sheet-section__header">
+                        <div class="sidebar-sheet-section__headline">
+                            Places
+                        </div>
+                    </div>
+                    <div>
+                        ${placesList.join(', ')}
+                    </div>
+                </div>
+            `;
+        }
+
+        this.map.getSource('points').setData(response.places);
+
+        this.fitBounds(response.places);
+    },
+
+    fitBounds(data) {
+        const bounds = new mapboxgl.LngLatBounds();
+
+        data.features.forEach(function(feature) {
+            bounds.extend(feature.geometry.coordinates);
+        });
+
+        this.map.fitBounds(bounds, {
+            maxZoom: 7
+        });
+    },
+
+    calcMapBoundsPadding() {
+
+        const generalPadding = 40;
+
+        return {
+            top: generalPadding, bottom: generalPadding, left: 450 + generalPadding * 2, right: generalPadding
+        };
+
     }
 });
 
-const mappingToolSheet = (showOnInit = false) => ({
+const mappingToolSheet = (showOnInit = false, position = 1) => ({
     visible: false,
     reduced: false,
+    position: position,
+    rootEl: null,
+    root: null,
+    closeCallback: null,
+    isOnProgress: false,
     init() {
+        this.root = this;
+        this.rootEl = this.$el;
         this.sheets.push(this);
-        this.updateSheets();
+        this.$el.style.setProperty('--sheet-position', position)
 
         if (showOnInit) {
             this.show();
         }
     },
 
-    show() {
+    close() {
+        this.isOnProgress = true;
+        this.visible = false;
+        this.rootEl.classList.remove('map-sidebar-sheet--shown');
+        setTimeout(() => {
+            this.rootEl.classList.remove('map-sidebar-sheet--visible');
+            this.isOnProgress = false;
+        }, 300);
+        this.updateSheets(this.root, true);
+        this.closeCallback?.();
+        this.closeCallback = null;
+    },
+
+    show(closeCallback) {
+        this.isOnProgress = true;
         this.$el.classList.add('map-sidebar-sheet--visible');
         void this.$el.offsetWidth;
         this.$el.classList.add('map-sidebar-sheet--shown');
         this.visible = true;
+        this.updateSheets();
+        this.closeCallback = closeCallback;
+        this.isOnProgress = true;
+    },
+
+    reduce() {
+        this.$el.classList.add('map-sidebar-sheet--reduced');
+        this.reduced = true;
+    },
+
+    increase() {
+        this.$el.classList.remove('map-sidebar-sheet--reduced');
+        this.reduced = false;
     }
 });
 
@@ -400,42 +764,7 @@ class MappingToolFilter {
 
         filterEl.addEventListener('change', async (e) => {
 
-            const formData = new FormData(filterEl);
 
-            this.filterData = {};
-
-            if (formData.get('source')) {
-                const fitTermSelectors = filterEl.querySelectorAll(`.mapping-tool-filter-term[data-source="${formData.get('source')}"]`);
-                this.filterData['source'] = formData.get('source');
-                fitTermSelectors.forEach((el) => {
-                    el.classList.add('visible');
-
-                    const input = el.querySelector('input');
-
-                    //console.log(el.getAttribute('name'))
-                    this.filterData[input.getAttribute('name')] = formData.getAll(input.getAttribute('name'));
-
-                });
-
-            }
-
-            const notFitTermSelectors = filterEl.querySelectorAll(`.mapping-tool-filter-term:not([data-source="${formData.get('source')}"])`);
-
-            notFitTermSelectors.forEach((el) => {
-                el.classList.remove('visible');
-            });
-
-            mappingToolEl.classList.add('progress');
-
-            const response = await fetch(
-                '/wp-json/mapping-tool/v1/getPoints?' + new URLSearchParams(this.filterData)
-            );
-
-            const data = await response.json();
-
-            map.getSource('points').setData(data);
-
-            mappingToolEl.classList.remove('progress');
         });
     }
 }

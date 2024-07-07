@@ -7,23 +7,26 @@ class PostTypeLocation
 	const PLUGIN_NAME = 'mapping-tool';
 	public static function register_post_type(): void
 	{
+		$themeColor = carbon_get_theme_option( 'mapping-tool_accent-color' );
+
 		$args = array(
 			'labels'             => array(
 				'name'                  => 'Places',
 				'singular_name'         => 'Place',
+				'add_new'               => 'Add Place',
 			),
 			'public'             => true,
-			'publicly_queryable' => true,
+			'publicly_queryable' => false,
 			'show_ui'            => true,
 			'show_in_menu'       => true,
 			'query_var'          => true,
 			'rewrite'            => array( 'slug' => 'place' ),
 			'capability_type'    => 'post',
 			'has_archive'        => false,
-			'hierarchical'       => false,
+			'hierarchical'       => true,
 			'menu_position'      => 7,
 			'menu_icon'           => 'dashicons-location-alt',
-			'supports'           => array( 'title', 'author', 'thumbnail', 'excerpt' ),
+			'supports'           => array( 'title', 'author', 'thumbnail', 'excerpt', 'page-attributes' ),
 		);
 
 		register_post_type( 'mapping-tool_place', $args );
@@ -36,7 +39,7 @@ class PostTypeLocation
 					'singular_name'         => $item['name_singular'],
 				),
 				'public'             => true,
-				'publicly_queryable' => true,
+				'publicly_queryable' => false,
 				'show_ui'            => true,
 				'show_in_menu'       => 'edit.php?post_type=mapping-tool_place',
 				'query_var'          => true,
@@ -44,7 +47,9 @@ class PostTypeLocation
 				'capability_type'    => 'post',
 				'has_archive'        => false,
 				'hierarchical'       => false,
-				'supports'           => array( 'title', 'author', 'thumbnail', 'excerpt' ),
+				'show_in_rest'       => false,
+				'supports'           => array( 'title', 'author', 'thumbnail', 'excerpt', 'editor' ),
+				'accent_color'       => empty($item['theme_color']) ? $themeColor : $item['theme_color']
 			);
 
 			register_post_type( self::PLUGIN_NAME . '_' . $item['slug'], $args );

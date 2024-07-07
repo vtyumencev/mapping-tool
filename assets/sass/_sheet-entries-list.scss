@@ -1,4 +1,5 @@
 .map-list-item {
+    position: relative;
     padding: 0.7em 1em;
     margin: 0 -1em;
     transition: 0.2s;
@@ -13,7 +14,22 @@
         text-transform: uppercase;
     }
 
-    &:hover {
+    &:after {
+        content: '';
+        pointer-events: none;
+        position: absolute;
+        left: 0.3em;
+        top: 0;
+        right: 0.3em;
+        bottom: 0;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0);
+        transition: 0.2s;
+        transform: scale(0.97);
+    }
+
+    &:hover:after {
         background: rgba(255, 255, 255, 0.1);
+        transform: scale(1);
     }
 }

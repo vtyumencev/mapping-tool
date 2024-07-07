@@ -29,7 +29,7 @@ $postTypes = carbon_get_theme_option( 'mapping-tool-post-types' );
     </head>
     <body <?php echo body_class(); ?>>
 
-        <div x-data="mappingTool" class="mapping-tool" style="--color-accent: <?php echo $accentColor; ?>;">
+        <div x-data="mappingTool" class="mapping-tool" :class="{'progress': loading}" style="--color-accent: <?php echo $accentColor; ?>;">
             <div class="map-wrapper">
                 <div class="map" id="mapping-tool-map"></div>
                 <div class="map-sidebar">
@@ -45,7 +45,7 @@ $postTypes = carbon_get_theme_option( 'mapping-tool-post-types' );
                             </div>
                         <?php endif; ?>
                     </div>
-                    <div class="map-sidebar-sheets">
+                    <div class="map-sidebar-sheets" tabindex="0" @keyup.escape="closeCurrent">
                         <button class="map-sidebar-sheets__open-master" @click="openMaster">
                             <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M8 8L12 4M12 4L16 8M12 4V16M4 20H20" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -53,9 +53,6 @@ $postTypes = carbon_get_theme_option( 'mapping-tool-post-types' );
                             <span class="">
                                 Sidebar
                             </span>
-                        </button>
-                        <button class="map-sidebar-sheets__close">
-                            <svg viewBox="-0.5 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g stroke-linecap="round" stroke-linejoin="round"></g><g><path d="M3 21.32L21 3.32001" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M3 3.32001L21 21.32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
                         </button>
                         <div x-data="mappingToolSheet(true)" x-init="sheetMaster = $data" class="map-sidebar-sheet map-sidebar-sheet-master">
                             <div class="map-sidebar-sheet-section">
@@ -95,7 +92,7 @@ $postTypes = carbon_get_theme_option( 'mapping-tool-post-types' );
                                                     <div class="mapping-tool-filter__group-name sidebar-sheet-section__headline">
                                                         <?php echo $taxonomy['name']; ?>
                                                     </div>
-                                                    <div class="mapping-tool-filter__options">
+                                                    <div class="mapping-tool-filter__options mapping-tool-filter__options--checkbox">
                                                         <?php foreach ($terms as $term): ?>
                                                             <label class="mapping-tool-filter-check">
                                                                 <input type="checkbox" name="<?php echo $taxonomy['slug']; ?>" value="<?php echo $term->slug; ?>" />
@@ -113,10 +110,47 @@ $postTypes = carbon_get_theme_option( 'mapping-tool-post-types' );
                                 </form>
                             </div>
                             <div class="map-sidebar-buttons">
-                                <button class="map-sidebar-button map-open-list">Open the list</button>
+                                <button class="map-sidebar-button" @click="openList">Open list</button>
                             </div>
+                            <button class="map-sidebar-sheet__close" @click="close">
+                                <svg viewBox="-0.5 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke-width="0"></g><g stroke-linecap="round" stroke-linejoin="round"></g><g><path d="M3 21.32L21 3.32001" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M3 3.32001L21 21.32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
+                            </button>
                         </div>
-                        <div x-data="mappingToolSheet" x-init="sheetEntriesList = $data" class="map-sidebar-sheet map-sidebar-sheet-entries-list"></div>
+                        <div x-data="mappingToolSheet(false, 1)" x-init="sheetEntriesList = $data" class="map-sidebar-sheet map-sidebar-sheet-entries-list">
+                            <div class="map-sidebar-sheet-section">
+                                <div class="map-sidebar-sheet-section__header">
+                                    <div class="sidebar-sheet-section__headline">
+				                        Entries
+                                    </div>
+                                </div>
+		                        <div x-ref="entriesList" class=""></div>
+                            </div>
+                            <button class="map-sidebar-sheet__close" @click="close">
+                                <svg viewBox="-0.5 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke-width="0"></g><g stroke-linecap="round" stroke-linejoin="round"></g><g><path d="M3 21.32L21 3.32001" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M3 3.32001L21 21.32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
+                            </button>
+                        </div>
+                        <div x-data="mappingToolSheet(false, 1)" x-init="sheetPlace = $data" class="map-sidebar-sheet map-sidebar-sheet-entries-list">
+                            <div class="map-sidebar-sheet-header">
+                                <div x-ref="overviewSubHeadline" class="map-sidebar-sheet-header__sub-headline">
+                                    Place
+                                </div>
+                                <div x-ref="overviewHeadline" class="map-sidebar-sheet-header__headline"></div>
+                            </div>
+                            <div x-ref="entriesList" class=""></div>
+                            <button class="map-sidebar-sheet__close" @click="close">
+                                <svg viewBox="-0.5 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke-width="0"></g><g stroke-linecap="round" stroke-linejoin="round"></g><g><path d="M3 21.32L21 3.32001" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M3 3.32001L21 21.32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
+                            </button>
+                        </div>
+                        <div x-data="mappingToolSheet(false, 1)" x-init="sheetOverview = $data" class="map-sidebar-sheet map-sidebar-sheet-entries-list">
+                            <div class="map-sidebar-sheet-header">
+                                <div x-ref="overviewSubHeadline" class="map-sidebar-sheet-header__sub-headline map-sidebar-sheet-header__sub-headline--accent-color"></div>
+                                <div x-ref="overviewHeadline" class="map-sidebar-sheet-header__headline"></div>
+                            </div>
+                            <div class="map-sidebar-sheet-body sheet-overview-body" x-ref="overviewBody"></div>
+                            <button class="map-sidebar-sheet__close" @click="close">
+                                <svg viewBox="-0.5 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke-width="0"></g><g stroke-linecap="round" stroke-linejoin="round"></g><g><path d="M3 21.32L21 3.32001" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M3 3.32001L21 21.32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="map-point-overview-wrapper">
                         <div class="map-point-overview">

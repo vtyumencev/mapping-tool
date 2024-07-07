@@ -9,6 +9,55 @@ use WP_REST_Response;
 
 class RestAPI
 {
+	public static function get_post(WP_REST_Request $request)
+	{
+		$postId = $request->get_param('post_id');
+
+		$post = get_post($postId);
+
+		$post->thumbnail_url = get_the_post_thumbnail_url($post);
+
+		$post->content = get_the_content(null, false, $post);
+
+		$post->post_type_name = get_post_type_object($post->post_type)->labels->singular_name;
+		$post->post_type_accent_color = get_post_type_object($post->post_type)->accent_color;
+
+		$taxonomies = [];
+
+		foreach (get_post_taxonomies($post) as $taxonomy) {
+			$taxonomies[] = [
+				'taxonomy' => get_taxonomy($taxonomy),
+				'values' => get_the_terms( $post->ID, $taxonomy ),
+			];
+		}
+
+		$placesList = [];
+		$postPlaces = carbon_get_post_meta($post->ID, 'associated_places');
+		foreach ($postPlaces as $postPlace) {
+			$place = get_post($postPlace['id']);
+			$placeLocation = carbon_get_post_meta($postPlace['id'], 'crb_place_location');
+			$placesList[] = array(
+				'properties' => [
+					'id' => $place->ID,
+					'title' => $place->post_title,
+				],
+				'geometry' => array('coordinates' => [$placeLocation['lng'], $placeLocation['lat']])
+			);
+		}
+
+		$places = array(
+			'type' => 'FeatureCollection',
+			'features' => $placesList,
+		);
+
+		return new WP_REST_Response(
+			array(
+				'post' => $post,
+				'taxonomies' => $taxonomies,
+				'places' => $places,
+			),
+		);
+	}
 	public static function get_entries(WP_REST_Request $request)
 	{
 		$postTypes = carbon_get_theme_option( 'mapping-tool-post-types' );
@@ -16,10 +65,6 @@ class RestAPI
 		$postTypesForQuery = array();
 
 		$taxonomies = array();
-
-		foreach ($postTypes as $postType) {
-			$postTypesForQuery[] = 'mapping-tool_' . $postType['slug'];
-		}
 
 		if ($request->get_param('source')) {
 
@@ -51,36 +96,50 @@ class RestAPI
 			}
 
 			$postTypesForQuery[0] = 'mapping-tool_' . $sourcePostType['slug'];
+		} else {
+			foreach ($postTypes as $postType) {
+				$postTypesForQuery[] = 'mapping-tool_' . $postType['slug'];
+			}
+		}
+
+		$place = null;
+		$metaQueries = [];
+		if ($request->get_param('place_id')) {
+			$metaQueries[] = [
+				'crb_map' => array(
+					'key' => 'associated_places',
+					'carbon_field_property' => 'id',
+					'compare' => '=',
+					'value' => $request->get_param('place_id'),
+				)
+			];
+
+			$place = get_post($request->get_param('place_id'));
 		}
 
 		$sourceEntries = new WP_Query(array(
 			'post_type'         => $postTypesForQuery,
 			'post_status'       => array('publish'),
 			'posts_per_page'    => '-1',
-			'tax_query'         => $taxonomies
+			'tax_query'         => $taxonomies,
+			'meta_query'        => $metaQueries,
 		));
 
 		$entries = [];
 
 		foreach ($sourceEntries->posts as $sourceEntry) {
-
-			$postTypeName = null;
-
-			foreach ($postTypes as $postType) {
-				if ('mapping-tool_' . $postType['slug'] === $sourceEntry->post_type) {
-					$postTypeName = $postType['name_singular'];
-				}
-			}
-
 			$entries[] = array(
+				'id' => $sourceEntry->ID,
 				'post_title' => $sourceEntry->post_title,
-				'post_type_name' => $postTypeName,
+				'post_type_name' => get_post_type_object($sourceEntry->post_type)->labels->singular_name,
+				'post_type_accent_color' => get_post_type_object($sourceEntry->post_type)->accent_color
 			);
 		}
 
 		return new WP_REST_Response(
 			array(
 				'entries' => $entries,
+				'place' => $place,
 			),
 		);
 	}
@@ -91,6 +150,7 @@ class RestAPI
 			'post_status'       => array( 'publish' ),
 			'posts_per_page'    => '-1'
 		);
+
 		$pointsListRaw = new WP_Query($args);
 
 		$postTypes = carbon_get_theme_option( 'mapping-tool-post-types' );
@@ -98,10 +158,6 @@ class RestAPI
 		$postTypesForQuery = array();
 
 		$taxonomies = array();
-
-		foreach ($postTypes as $postType) {
-			$postTypesForQuery[] = 'mapping-tool_' . $postType['slug'];
-		}
 
 		if ($request->get_param('source')) {
 
@@ -132,7 +188,11 @@ class RestAPI
 				);
 			}
 
-			$postTypesForQuery[0] = 'mapping-tool_' . $sourcePostType['slug'];
+			$postTypesForQuery[] = 'mapping-tool_' . $sourcePostType['slug'];
+		} else {
+			foreach ($postTypes as $postType) {
+				$postTypesForQuery[] = 'mapping-tool_' . $postType['slug'];
+			}
 		}
 
 		$sourceEntries = new WP_Query(array(
@@ -157,8 +217,10 @@ class RestAPI
 			}
 			$placeLocation = carbon_get_post_meta( $pointRow->ID, 'crb_place_location' );
 			$pointsList[] = array(
-				'id' => $pointRow->ID,
-				'title' => $pointRow->post_title,
+				'properties' => [
+					'id' => $pointRow->ID,
+					'title' => $pointRow->post_title,
+				],
 				'geometry' => array('coordinates' => [$placeLocation['lng'], $placeLocation['lat']])
 			);
 		}
@@ -181,6 +243,11 @@ class RestAPI
 		register_rest_route( 'mapping-tool/v1', 'getEntries', array(
 			'methods' => 'GET',
 			'callback' => [__CLASS__, 'get_entries'],
+		) );
+
+		register_rest_route( 'mapping-tool/v1', 'getPost', array(
+			'methods' => 'GET',
+			'callback' => [__CLASS__, 'get_post'],
 		) );
 	}
 	public static function init(): void
