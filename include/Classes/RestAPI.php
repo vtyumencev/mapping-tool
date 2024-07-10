@@ -132,7 +132,8 @@ class RestAPI
 				'id' => $sourceEntry->ID,
 				'post_title' => $sourceEntry->post_title,
 				'post_type_name' => get_post_type_object($sourceEntry->post_type)->labels->singular_name,
-				'post_type_accent_color' => get_post_type_object($sourceEntry->post_type)->accent_color
+				'post_type_accent_color' => get_post_type_object($sourceEntry->post_type)->accent_color,
+				'timeline_date' => carbon_get_post_meta( $sourceEntry->ID, 'timeline_date' )
 			);
 		}
 

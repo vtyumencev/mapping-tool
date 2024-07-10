@@ -1,0 +1,40 @@
+.timeline {
+    min-height: calc(100vh - 132px - 113px);
+    display: flex;
+    overflow: hidden;
+    &__container {
+        width: 100%;
+        display: flex;
+        position: relative;
+    }
+
+    &__sidebar {
+        margin-left: 20px;
+        width: 450px;
+        height: calc(100% - 40px);
+        position: absolute;
+        z-index: 1;
+    }
+    &__body {
+        overflow: auto;
+        padding-left: 500px;
+        display: grid;
+        height: 100%;
+        width: 100%;
+        .d3kit-chart-root {
+            margin: auto 0;
+
+            .label-text {
+                cursor: pointer;
+            }
+        }
+    }
+}
+
+.timeline.progress .loading-overlay {
+    display: flex;
+    background: rgb(255, 255, 255, 50%);
+    g {
+        fill: black;
+    }
+}

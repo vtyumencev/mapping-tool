@@ -47,7 +47,7 @@ class PostTypeLocation
 				'capability_type'    => 'post',
 				'has_archive'        => false,
 				'hierarchical'       => false,
-				'show_in_rest'       => false,
+				'show_in_rest'       => true,
 				'supports'           => array( 'title', 'author', 'thumbnail', 'excerpt', 'editor' ),
 				'accent_color'       => empty($item['theme_color']) ? $themeColor : $item['theme_color']
 			);

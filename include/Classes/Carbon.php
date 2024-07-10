@@ -57,7 +57,8 @@ class Carbon
 			Container::make( 'post_meta', 'Places' )
 			         ->where( 'post_type', '=', 'mapping-tool_' . $item['slug'] )
 			         ->add_fields( array(
-				         Field::make( 'association', 'associated_places', 'Associated Places' )
+						 Field::make('date', 'timeline_date', 'Timeline Date'),
+				         Field::make('association', 'associated_places', 'Associated Places')
 				              ->set_types( array(
 					              array(
 						              'type'      => 'post',

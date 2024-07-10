@@ -4,9 +4,8 @@ function map_enqueue_scripts() {
 	$mapBoxAccessToken = carbon_get_theme_option( 'map_box_token' );
 	wp_enqueue_style( 'mapbox', "https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" );
 	wp_enqueue_script( 'mapbox', "https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.js" );
-	wp_enqueue_style( 'mapping-tool', MAPPING_TOOL_PATH . 'assets/mapping-tool.css' );
-	wp_enqueue_script( 'mapping-tool', MAPPING_TOOL_PATH . 'assets/mapping-tool.js', [], false, ['in_footer' => true] );
-	wp_enqueue_script( 'alpinejs', MAPPING_TOOL_PATH . 'assets/alpine.js', ['mapping-tool'], false, ['in_footer' => true] );
+	wp_enqueue_style( 'mapping-tool', MAPPING_TOOL_PATH . 'dist/style.css' );
+	wp_enqueue_script( 'mapping-tool', MAPPING_TOOL_PATH . 'dist/mapping-tool.umd.cjs', [], false, ['in_footer' => true] );
 	wp_localize_script( 'mapping-tool', 'mappingToolObject', array(
         'accessToken' => $mapBoxAccessToken,
     ));
